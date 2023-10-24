@@ -1010,11 +1010,11 @@ class FINEMAP_Wrapper(Fine_Mapping):
             url_path = urlparse(ld_file).path
             filename = os.path.basename(url_path)
             supposed_ld_file = os.path.join(self.cache_dir, filename)
-            if os.path.exists(supposed_ld_file + '.npz'):
-                logging.info('LD file %s not exist, try download it from url' % (finemap_dir))
+            if not os.path.exists(supposed_ld_file + '.npz'):
+                logging.info('LD file %s not exist, try download it from url' % (supposed_ld_file + '.npz'))
                 ld_file = download_ld_file(ld_file, cache_dir=self.cache_dir)
             else:
-                logging.info('LD file exist in %s, do not download again' % (finemap_dir))
+                logging.info('LD file exist in %s, do not download again' % (supposed_ld_file + '.npz'))
                 ld_file = supposed_ld_file
             
         #create prefix of output files  hqy 20231023
