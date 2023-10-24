@@ -1020,7 +1020,7 @@ class FINEMAP_Wrapper(Fine_Mapping):
         #create prefix of output files  hqy 20231023
         if finemap_dir is None:
             if self.cache_dir:
-                finemap_dir = os.path.join(self.cache_dir, os.path.basename(ld_file))
+                finemap_dir = os.path.join(self.cache_dir, 'tmp_finemap_dir_' + os.path.basename(ld_file))
                 os.makedirs(finemap_dir, exist_ok=True)
                 logging.info('Saving FINEMAP files to directory: %s' % (finemap_dir))
             else:
