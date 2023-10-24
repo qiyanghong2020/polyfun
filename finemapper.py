@@ -32,8 +32,6 @@ def splash_screen():
     print('*********************************************************************')
     print()
     
-    
-
 
 def uri_validator(x):
     '''
@@ -45,8 +43,7 @@ def uri_validator(x):
     except:
         return False
     
-    
-    
+
 def load_ld_npz(ld_prefix):
 
     logging.info('Loading LD file %s'%(ld_prefix))
@@ -126,9 +123,12 @@ def read_ld_from_file(ld_file):
     return ld_arr, df_ld_snps
     
     
-    
-def download_ld_file(url_prefix):
-    temp_dir = tempfile.mkdtemp()
+""" original 
+def download_ld_file(url_prefix, cache_dir=None):
+    if not cache_dir:
+        temp_dir = tempfile.mkdtemp()
+    else:
+        temp_dir = cache_dir
     filename_prefix = os.path.join(temp_dir, 'ld')
     for suffix in ['npz', 'gz']:
         url = url_prefix + '.' + suffix
@@ -143,7 +143,34 @@ def download_ld_file(url_prefix):
                     raise
                 
     return filename_prefix
-    
+"""
+
+# modify by hqy 20231021
+def download_ld_file(url_prefix, cache_dir=None):
+    if not cache_dir:
+        temp_dir = tempfile.mkdtemp()
+    else:
+        temp_dir = cache_dir
+
+    for suffix in ['npz', 'gz']:
+        url = url_prefix + '.' + suffix
+
+        # 获取 URL 中的文件名
+        url_path = urlparse(url).path
+        filename = os.path.basename(url_path)
+        filepath = os.path.join(temp_dir, filename)
+
+        with TqdmUpTo(unit='B', unit_scale=True, unit_divisor=1024, miniters=1, desc=f'downloading {url}') as t:
+            try:
+                urllib.request.urlretrieve(url, filename=filepath, reporthook=t.update_to)
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    raise ValueError(f'URL {url} wasn\'t found')
+                else:
+                    raise
+        ld_file, file_extension = os.path.splitext(filepath)
+    return ld_file  # 返回存储下载文件的目录路径
+
 
 def run_executable(cmd, description, good_returncode=0, measure_time=True, check_errors=True, show_output=False, show_command=False):
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -714,7 +741,10 @@ class SUSIE_Wrapper(Fine_Mapping):
 
 
 
-    def finemap(self, locus_start, locus_end, num_causal_snps, use_prior_causal_prob=True, prior_var=None, residual_var=None, residual_var_init=None, hess_resvar=False, hess=False, hess_iter=100, hess_min_h2=None, susie_max_iter=100, verbose=False, ld_file=None, debug_dir=None, allow_missing=False, susie_outfile=None, finemap_dir=None):
+    def finemap(self, locus_start, locus_end, num_causal_snps, use_prior_causal_prob=True, prior_var=None,
+                residual_var=None, residual_var_init=None, hess_resvar=False, hess=False, hess_iter=100,
+                hess_min_h2=None, susie_max_iter=100, verbose=False, ld_file=None, debug_dir=None,
+                allow_missing=False, susie_outfile=None, finemap_dir=None):
 
         #check params
         if use_prior_causal_prob and 'SNPVAR' not in self.df_sumstats.columns:
@@ -727,8 +757,15 @@ class SUSIE_Wrapper(Fine_Mapping):
         
         #download LD file if it's a url
         if uri_validator(ld_file):
-            ld_file = download_ld_file(ld_file)
-            delete_ld_files_on_exit = True
+            # 获取 URL 中的文件名
+            url_path = urlparse(ld_file).path
+            filename = os.path.basename(url_path)
+            supposed_ld_file = os.path.join(self.cache_dir, filename)
+            if not os.path.exists(supposed_ld_file + '.npz'):
+                ld_file = download_ld_file(ld_file, cache_dir=self.cache_dir)
+            else:
+                ld_file = supposed_ld_file
+            #delete_ld_files_on_exit = True
         else:
             delete_ld_files_on_exit = False
     
@@ -946,8 +983,10 @@ class FINEMAP_Wrapper(Fine_Mapping):
         self.finemap_exe = finemap_exe
 
 
-
-    def finemap(self, locus_start, locus_end, num_causal_snps, use_prior_causal_prob=True, prior_var=None, residual_var=None, hess=False, hess_iter=100, hess_min_h2=None, susie_max_iter=100, verbose=False, ld_file=None, debug_dir=None, allow_missing=False, susie_outfile=None, residual_var_init=None, hess_resvar=False, finemap_dir=None):
+    def finemap(self, locus_start, locus_end, num_causal_snps, use_prior_causal_prob=True,
+                prior_var=None, residual_var=None, hess=False, hess_iter=100, hess_min_h2=None,
+                susie_max_iter=100, verbose=False, ld_file=None, debug_dir=None, allow_missing=False,
+                susie_outfile=None, residual_var_init=None, hess_resvar=False, finemap_dir=None):
 
         #check params
         if use_prior_causal_prob and 'SNPVAR' not in self.df_sumstats.columns:
@@ -964,14 +1003,28 @@ class FINEMAP_Wrapper(Fine_Mapping):
             raise NotImplementedError('FINEMAP object does not support --susie-resvar-init')
         # if allow_missing:
             # raise ValueError('FINEMAP object does not support --allow-missing')
-            
+
         #download LD file if it's a url
         if uri_validator(ld_file):
-            ld_file = download_ld_file(ld_file)            
+            # 获取 URL 中的文件名
+            url_path = urlparse(ld_file).path
+            filename = os.path.basename(url_path)
+            supposed_ld_file = os.path.join(self.cache_dir, filename)
+            if os.path.exists(supposed_ld_file + '.npz'):
+                logging.info('LD file %s not exist, try download it from url' % (finemap_dir))
+                ld_file = download_ld_file(ld_file, cache_dir=self.cache_dir)
+            else:
+                logging.info('LD file exist in %s, do not download again' % (finemap_dir))
+                ld_file = supposed_ld_file
             
-        #create prefix of output files
+        #create prefix of output files  hqy 20231023
         if finemap_dir is None:
-            finemap_dir = tempfile.mkdtemp()
+            if self.cache_dir:
+                finemap_dir = os.path.join(self.cache_dir, os.path.basename(ld_file))
+                os.makedirs(finemap_dir, exist_ok=True)
+                logging.info('Saving FINEMAP files to directory: %s' % (finemap_dir))
+            else:
+                finemap_dir = tempfile.mkdtemp()
         else:
             os.makedirs(finemap_dir, exist_ok=True)
             logging.info('Saving FINEMAP files to directory: %s'%(finemap_dir))
@@ -1272,20 +1325,23 @@ if __name__ == '__main__':
         raise ValueError('unknown method specified in --method')
         
     #run fine-mapping
-    df_finemap = finemap_obj.finemap(locus_start=args.start, locus_end=args.end, num_causal_snps=args.max_num_causal,
-                 use_prior_causal_prob=not args.non_funct, prior_var=None,
-                 hess=args.hess, hess_iter=args.hess_iter, hess_min_h2=args.hess_min_h2,
-                 verbose=args.verbose, ld_file=args.ld, debug_dir=args.debug_dir, allow_missing=args.allow_missing,
-                 susie_outfile=args.susie_outfile, finemap_dir=args.finemap_dir,
-                 residual_var=args.susie_resvar, residual_var_init=args.susie_resvar_init, hess_resvar=args.susie_resvar_hess,
-                 susie_max_iter=args.susie_max_iter)
-    logging.info('Writing fine-mapping results to %s'%(args.out))
-    if not args.no_sort_pip:
-        df_finemap.sort_values('PIP', ascending=False, inplace=True)
-    if args.out.endswith('.parquet'):
-        df_finemap.to_parquet(args.out, index=False)
+    if not os.path.exists(args.out):
+        df_finemap = finemap_obj.finemap(locus_start=args.start, locus_end=args.end, num_causal_snps=args.max_num_causal,
+                     use_prior_causal_prob=not args.non_funct, prior_var=None,
+                     hess=args.hess, hess_iter=args.hess_iter, hess_min_h2=args.hess_min_h2,
+                     verbose=args.verbose, ld_file=args.ld, debug_dir=args.debug_dir, allow_missing=args.allow_missing,
+                     susie_outfile=args.susie_outfile, finemap_dir=args.finemap_dir,
+                     residual_var=args.susie_resvar, residual_var_init=args.susie_resvar_init, hess_resvar=args.susie_resvar_hess,
+                     susie_max_iter=args.susie_max_iter)
+        logging.info('Writing fine-mapping results to %s'%(args.out))
+        if not args.no_sort_pip:
+            df_finemap.sort_values('PIP', ascending=False, inplace=True)
+        if args.out.endswith('.parquet'):
+            df_finemap.to_parquet(args.out, index=False)
+        else:
+            df_finemap.to_csv(args.out, sep='\t', index=False, float_format='%0.5e')
     else:
-        df_finemap.to_csv(args.out, sep='\t', index=False, float_format='%0.5e')
+        logging.info('Finemapping already done before, do not run again. if you want rerun, please del results in %s'%(args.out))
 
 
 

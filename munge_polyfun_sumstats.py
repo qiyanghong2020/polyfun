@@ -36,21 +36,21 @@ def find_df_column(df, strings_to_find, allow_missing=False):
         
         
 def rename_df_columns(df_sumstats):
-    chr_column = find_df_column(df_sumstats, ['CHR', 'CHROMOSOME', 'CHROM'])
+    chr_column = find_df_column(df_sumstats, ['CHR', '#CHR', 'CHROMOSOME', 'CHROM'])
     bp_column = find_df_column(df_sumstats, ['BP', 'POS', 'POSITION', 'COORDINATE', 'BASEPAIR'])
     snp_column = find_df_column(df_sumstats, ['SNP', 'RSID', 'RS', 'NAME', 'MarkerName'])
-    a1freq_col = find_df_column(df_sumstats, ['A1FREQ', 'freq', 'MAF', 'FRQ'], allow_missing=True)
+    a1freq_col = find_df_column(df_sumstats, ['A1FREQ', 'all_meta_AF', 'freq', 'MAF', 'FRQ'], allow_missing=True)
     info_col = find_df_column(df_sumstats, 'INFO', allow_missing=True)
-    beta_col = find_df_column(df_sumstats, ['BETA', 'EFF', 'EFFECT', 'EFFECT_SIZE', 'OR'], allow_missing=True)
-    se_col = find_df_column(df_sumstats, ['SE'], allow_missing=True)
-    pvalue_col = find_df_column(df_sumstats, ['P_BOLT_LMM', 'P', 'PVALUE', 'P-VALUE', 'P_value', 'PVAL'], allow_missing=True)
+    beta_col = find_df_column(df_sumstats, ['BETA', 'inv_var_meta_beta', 'EFF', 'EFFECT', 'EFFECT_SIZE', 'OR'], allow_missing=True)
+    se_col = find_df_column(df_sumstats, ['SE', 'inv_var_meta_sebeta'], allow_missing=True)
+    pvalue_col = find_df_column(df_sumstats, ['P_BOLT_LMM', 'P', 'inv_var_meta_p', 'PVALUE', 'P-VALUE', 'P_value', 'PVAL'], allow_missing=True)
     z_col = find_df_column(df_sumstats, ['Z', 'ZSCORE', 'Z_SCORE'], allow_missing=True)    
     n_col = find_df_column(df_sumstats, ['N', 'sample_size'], allow_missing=True)    
     ncase_col = find_df_column(df_sumstats, ['N_cases', 'Ncase', 'Nca','Total_NCase'], allow_missing=True)    
     ncontrol_col = find_df_column(df_sumstats, ['N_controls', 'Ncontrol','Nco','Total_NControl'], allow_missing=True)    
     try:
-        allele1_col = find_df_column(df_sumstats, ['ALLELE1', 'A1', 'a1', 'a_1'])
-        allele0_col = find_df_column(df_sumstats, ['ALLELE0', 'A0', 'a0', 'a_0'])
+        allele1_col = find_df_column(df_sumstats, ['ALLELE1', 'A1', 'a1', 'a_1', 'ALT'])
+        allele0_col = find_df_column(df_sumstats, ['ALLELE0', 'A0', 'a0', 'a_0', 'REF'])
     except ValueError:
         allele1_col = find_df_column(df_sumstats, ['ALLELE1', 'A1', 'a1', 'a_1'])
         allele0_col = find_df_column(df_sumstats, ['ALLELE2', 'A2', 'a2', 'a_2'])
@@ -191,8 +191,14 @@ def sanity_checks(df_sumstats):
              df_sumstats['A1'].astype('str') + '.' + \
              df_sumstats['A2'].astype('str')
     if np.any(df_snp.duplicated()):
-        raise ValueError('The input file includes duplicate SNPs')
-    
+        # get dup snps  hqy20231020
+        duplicated_snps = df_sumstats[df_snp.duplicated(keep=False)]  # keep=False will save all duplicated snp, including first appear
+        # save dup snp to csv hqy20231020
+        duplicated_snps.to_csv('munge_polyfun_sumstats.duplicated_snp.csv', index=False, header=True)  # index=False do not save  index to csv file 
+        print("{} duplicated SNPs have been saved to 'munge_polyfun_sumstats.duplicated_snp.csv'.".format(len(duplicated_snps)))
+        print(df_snp.loc[df_snp.duplicated()])
+        df_snp.drop_duplicates()
+        return df_sumstats[~df_snp.duplicated()]
     #compute Z    
     
     
@@ -253,8 +259,17 @@ if __name__ == '__main__':
     #filter sumstats
     df_sumstats = filter_sumstats(df_sumstats, min_info_score=args.min_info, min_maf=args.min_maf, remove_strand_ambig=args.remove_strand_ambig, keep_hla=args.keep_hla)
     
+    # rename df_sumstats columns #hqy 20231013
+    columns_to_rename = {
+    'N_case': 'N_CASES',
+    'N_casE': 'N_CASES',
+    'N_ca': 'N_CASES',
+    'N_ctrl': 'N_CONTROLS'
+    }
+    df_sumstats.rename(columns=columns_to_rename, inplace=True)
+
     #do some sanity checks
-    sanity_checks(df_sumstats)
+    df_sumstats = sanity_checks(df_sumstats)
 
     #compute Neff    
     if 'CHISQ_BOLT_LMM' in df_sumstats.columns and not args.no_neff:

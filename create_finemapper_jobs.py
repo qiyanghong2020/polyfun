@@ -100,6 +100,7 @@ if __name__ == '__main__':
     parser.add_argument('--out-prefix', required=True, help='prefix of the output files')
     parser.add_argument('--jobs-file', required=True, help='name of file with fine-mapping commands')
     parser.add_argument('--pvalue-cutoff', type=float, default=None, help='only consider regions that have at least one SNP with a p-value greater than this cutoff')
+    parser.add_argument('--cache-dir', default=None, help='If specified, this is a path of a directory that will cache LD matrices that have already been computed') # hqy 20231020
     
     #check package versions
     check_package_versions()
