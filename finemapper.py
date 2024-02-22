@@ -22,7 +22,7 @@ from polyfun import configure_logger, check_package_versions
 import urllib.request
 from urllib.parse import urlparse
 from packaging.version import Version
-
+import uuid
 
 def splash_screen():
     print('*********************************************************************')
@@ -56,6 +56,7 @@ def load_ld_npz(ld_prefix):
         df_ld_snps = pd.read_parquet(snps_filename_parquet)
     elif os.path.exists(snps_filename_gz):
         df_ld_snps = pd.read_table(snps_filename_gz, sep='\s+')
+        print('1==  df_ld_snps.shape', df_ld_snps.shape)
         df_ld_snps.rename(columns={'allele1':'A1', 'allele2':'A2', 'position':'BP', 'chromosome':'CHR', 'rsid':'SNP'}, inplace=True, errors='ignore')
     else:
         raise ValueError('couldn\'t find SNPs file %s or %s'%(snps_filename_parquet, snps_filename_gz))
@@ -285,11 +286,17 @@ class Fine_Mapping(object):
         
         
     def sync_ld_sumstats(self, ld_arr, df_ld_snps, allow_missing=False):
-        df_ld_snps = set_snpid_index(df_ld_snps, allow_swapped_indel_alleles=self.allow_swapped_indel_alleles)
-        
+        print('4== ld_arr.shape;df_ld_snps.shape', ld_arr.shape, df_ld_snps.shape)
+        df1 = df_ld_snps.copy()
+        df_ld_snps = set_snpid_index(df_ld_snps, allow_duplicates=True, allow_swapped_indel_alleles=self.allow_swapped_indel_alleles)
+        df2 = df_ld_snps.copy()
+        #difference = df1.compare(df2)
+        #print('6=======', difference)
+        print('5== ld_arr.shape;df_ld_snps.shape', ld_arr.shape, df_ld_snps.shape)
         if ld_arr is None:
             df_ld = pd.DataFrame(np.zeros(len(df_ld_snps.index), dtype=np.int64), index=df_ld_snps.index, columns=['dummy'])
         else:
+            print('3== ld_arr.shape;df_ld_snps.shape', ld_arr.shape, df_ld_snps.shape)
             assert ld_arr.shape[0] == df_ld_snps.shape[0]
             assert ld_arr.shape[0] == ld_arr.shape[1]
             df_ld = pd.DataFrame(ld_arr, index=df_ld_snps.index, columns=df_ld_snps.index)
@@ -1020,7 +1027,8 @@ class FINEMAP_Wrapper(Fine_Mapping):
         #create prefix of output files  hqy 20231023
         if finemap_dir is None:
             if self.cache_dir:
-                finemap_dir = os.path.join(self.cache_dir, 'tmp_finemap_dir_' + os.path.basename(ld_file))
+                unique_filename = str(uuid.uuid4())
+                finemap_dir = os.path.join(self.cache_dir, 'tmp_finemap_dir_' + unique_filename)
                 os.makedirs(finemap_dir, exist_ok=True)
                 logging.info('Saving FINEMAP files to directory: %s' % (finemap_dir))
             else:
@@ -1059,6 +1067,7 @@ class FINEMAP_Wrapper(Fine_Mapping):
                 pass
             elif ld_file.endswith('.npz') or os.path.exists(ld_file+'.npz'):
                     ld_arr, df_ld_snps = read_ld_from_file(ld_file)
+                    print('2==  ld_arr.shape;df_ld_snps.shape', ld_arr.shape, df_ld_snps.shape)
                     self.sync_ld_sumstats(ld_arr, df_ld_snps, allow_missing=allow_missing)
                     del ld_arr, df_ld_snps
                     ld_file = finemap_output_prefix + '.ld'

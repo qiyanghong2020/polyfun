@@ -70,7 +70,6 @@ def set_snpid_index(df, copy=False, allow_duplicates=False, allow_swapped_indel_
     df.index = df['CHR'].astype(int).astype(str) + '.' + df['BP'].astype(str) + '.' + df['A1s'] + '.' + df['A2s']
     df.index.name = 'snpid'
     df.drop(columns=['A1_first', 'A1s', 'A2s'], inplace=True)
-    
     #check for duplicate SNPs
     if not allow_duplicates:
         is_duplicate_snp = df.index.duplicated()
@@ -79,7 +78,8 @@ def set_snpid_index(df, copy=False, allow_duplicates=False, allow_swapped_indel_
             snp_colums = [c for c in ['SNP', 'CHR', 'BP', 'A1', 'A2'] if c in df.columns]
             df_dup_snps = df_dup_snps.loc[~df_dup_snps.index.duplicated(), snp_colums]
             error_msg = 'Duplicate SNPs were found in the input data:\n%s'%(df_dup_snps)
-            raise ValueError(error_msg)
+            raise ValueError(error_msg) # hqy 20231013
+            df = df.loc[~is_duplicate_snp]
     return df
 
 
